@@ -203,7 +203,7 @@ async function main() {
     if (!packageName) {
       console.error(`cc-wrapped: Unsupported platform: ${os.platform()}-${os.arch()}`);
       console.error("Please download the binary manually from:");
-      console.error("https://github.com/moddi3/cc-wrapped/releases");
+      console.error("https://github.com/numman-ali/cc-wrapped/releases");
       process.exit(0); // Exit gracefully
     }
 
@@ -229,7 +229,7 @@ async function main() {
       console.error(`cc-wrapped: Could not find binary for ${packageName}`);
       console.error("The optional dependency may have failed to install.");
       console.error("Please download the binary manually from:");
-      console.error("https://github.com/moddi3/cc-wrapped/releases");
+      console.error("https://github.com/numman-ali/cc-wrapped/releases");
       process.exit(0);
     }
 

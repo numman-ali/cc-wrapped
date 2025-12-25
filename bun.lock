@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "opencode-wrapped",
+      "name": "cc-wrapped",
       "dependencies": {
         "@clack/prompts": "^0.11.0",
         "@resvg/resvg-wasm": "^2.6.2",
