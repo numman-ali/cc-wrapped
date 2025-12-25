@@ -6,6 +6,14 @@
     "email": "numman.ali@gmail.com"
   },
   "description": "Generate a personalized Spotify Wrapped-style summary of your Claude Code usage",
+  "homepage": "https://github.com/numman-ali/cc-wrapped",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/numman-ali/cc-wrapped.git"
+  },
+  "bugs": {
+    "url": "https://github.com/numman-ali/cc-wrapped/issues"
+  },
   "keywords": [
     "claude",
     "claude-code",
