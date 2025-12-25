@@ -525,7 +525,7 @@ function StatsGrid({ stats }: { stats: ClaudeCodeStats }) {
   return (
     <div
       style={{
-        marginTop: spacing[4],
+        marginTop: spacing[2],
         display: "flex",
         flexDirection: "column",
         gap: spacing[5],
@@ -617,7 +617,7 @@ function Footer() {
   return (
     <div
       style={{
-        marginTop: spacing[4],
+        marginTop: spacing[2],
         display: "flex",
         flexDirection: "row",
         justifyContent: "center",
