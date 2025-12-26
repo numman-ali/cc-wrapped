@@ -59,8 +59,13 @@ export interface ClaudeUsageSummary {
 }
 
 export async function checkClaudeDataExists(): Promise<boolean> {
+  const projectsPath = join(CLAUDE_DATA_PATH, CLAUDE_PROJECTS_DIR);
+  return await pathIsDirectory(projectsPath);
+}
+
+export async function checkStatsCacheExists(): Promise<boolean> {
   try {
-    await readFile(CLAUDE_STATS_CACHE_PATH);
+    await stat(CLAUDE_STATS_CACHE_PATH);
     return true;
   } catch {
     return false;
@@ -68,8 +73,12 @@ export async function checkClaudeDataExists(): Promise<boolean> {
 }
 
 export async function loadClaudeStatsCache(): Promise<ClaudeStatsCache> {
-  const raw = await readFile(CLAUDE_STATS_CACHE_PATH, "utf8");
-  return JSON.parse(raw) as ClaudeStatsCache;
+  try {
+    const raw = await readFile(CLAUDE_STATS_CACHE_PATH, "utf8");
+    return JSON.parse(raw) as ClaudeStatsCache;
+  } catch {
+    return {};
+  }
 }
 
 export async function collectClaudeProjects(year: number): Promise<Set<string>> {
