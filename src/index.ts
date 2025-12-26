@@ -27,6 +27,7 @@ USAGE:
 OPTIONS:
   -y, --year <YYYY>        Generate wrapped for a specific year (default: current year)
   -c, --config-dir <PATH>  Path to Claude Code config directory (default: auto-detect)
+  -o, --output <PATH>      Output path for image (default: ~/cc-wrapped-YYYY.png)
   -V, --verbose            Show debug information
   -h, --help               Show this help message
   -v, --version            Show version number
@@ -35,6 +36,7 @@ EXAMPLES:
   cc-wrapped                            # Generate current year wrapped
   cc-wrapped --year 2025                # Generate 2025 wrapped
   cc-wrapped -c ~/.config/claude        # Use specific config directory
+  cc-wrapped -o ~/Desktop/wrapped.png   # Save to specific location
   cc-wrapped --verbose                  # Show debug info
 `);
 }
@@ -46,6 +48,7 @@ async function main() {
     options: {
       year: { type: "string", short: "y" },
       "config-dir": { type: "string", short: "c" },
+      output: { type: "string", short: "o" },
       verbose: { type: "boolean", short: "V" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
@@ -188,24 +191,39 @@ async function main() {
     p.log.info("You can save the image to disk instead.");
   }
 
-  const defaultPath = join(process.env.HOME || "~", filename);
-
-  const shouldSave = await p.confirm({
-    message: `Save image to ~/${filename}?`,
-    initialValue: true,
-  });
-
-  if (p.isCancel(shouldSave)) {
-    p.outro("Cancelled");
-    process.exit(0);
-  }
-
-  if (shouldSave) {
+  // Handle image saving
+  const outputPath = values.output;
+  if (outputPath) {
+    // If --output is provided, save directly without prompting
     try {
-      await Bun.write(defaultPath, image.fullSize);
-      p.log.success(`Saved to ${defaultPath}`);
+      await Bun.write(outputPath, image.fullSize);
+      p.log.success(`Saved to ${outputPath}`);
     } catch (error) {
-      p.log.error(`Failed to save: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      p.log.error(`Failed to save: ${message}`);
+    }
+  } else {
+    // Interactive mode: prompt user
+    const defaultPath = join(process.env.HOME || "~", filename);
+
+    const shouldSave = await p.confirm({
+      message: `Save image to ~/${filename}?`,
+      initialValue: true,
+    });
+
+    if (p.isCancel(shouldSave)) {
+      p.outro("Cancelled");
+      process.exit(0);
+    }
+
+    if (shouldSave) {
+      try {
+        await Bun.write(defaultPath, image.fullSize);
+        p.log.success(`Saved to ${defaultPath}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        p.log.error(`Failed to save: ${message}`);
+      }
     }
   }
 
