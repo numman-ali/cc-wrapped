@@ -154,9 +154,11 @@ export async function collectClaudeUsageSummary(year: number): Promise<ClaudeUsa
       for await (const line of rl) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-        let entry: any;
+        let entry: Record<string, unknown>;
         try {
-          entry = JSON.parse(trimmed);
+          const parsed: unknown = JSON.parse(trimmed);
+          if (typeof parsed !== "object" || parsed === null) continue;
+          entry = parsed as Record<string, unknown>;
         } catch {
           continue;
         }
@@ -169,8 +171,8 @@ export async function collectClaudeUsageSummary(year: number): Promise<ClaudeUsa
           processedHashes.add(uniqueHash);
         }
 
-        const timestamp = entry?.timestamp;
-        if (!timestamp) continue;
+        const timestamp = entry.timestamp;
+        if (typeof timestamp !== "number" && typeof timestamp !== "string") continue;
         const entryDate = new Date(timestamp);
         if (Number.isNaN(entryDate.getTime()) || entryDate.getFullYear() !== year) {
           continue;
@@ -184,15 +186,16 @@ export async function collectClaudeUsageSummary(year: number): Promise<ClaudeUsa
         dailyActivity.set(dateKey, (dailyActivity.get(dateKey) || 0) + 1);
         totalMessages += 1;
 
-        const sessionId = typeof entry?.sessionId === "string" ? entry.sessionId : undefined;
+        const sessionId = typeof entry.sessionId === "string" ? entry.sessionId : undefined;
         if (sessionId) {
           sessionIds.add(sessionId);
         }
 
-        const usage = entry?.message?.usage;
-        const model = typeof entry?.message?.model === "string" ? entry.message.model : undefined;
+        const message = entry.message as Record<string, unknown> | undefined;
+        const usage = message?.usage as Record<string, unknown> | undefined;
+        const model = typeof message?.model === "string" ? message.model : undefined;
 
-        const rawCost = entry?.costUSD;
+        const rawCost = entry.costUSD;
         const hasCost = typeof rawCost === "number" && Number.isFinite(rawCost);
         if (hasCost) {
           totalCostUSD += rawCost;
@@ -254,9 +257,10 @@ export async function collectClaudeUsageSummary(year: number): Promise<ClaudeUsa
   };
 }
 
-function createUniqueHash(entry: any): string | null {
-  const messageId = entry?.message?.id;
-  const requestId = entry?.requestId;
+function createUniqueHash(entry: Record<string, unknown>): string | null {
+  const message = entry.message as Record<string, unknown> | undefined;
+  const messageId = message?.id;
+  const requestId = entry.requestId;
   if (!messageId || !requestId) return null;
   return `${messageId}:${requestId}`;
 }
