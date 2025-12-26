@@ -63,6 +63,15 @@ export async function checkClaudeDataExists(): Promise<boolean> {
   return await pathIsDirectory(projectsPath);
 }
 
+export async function checkStatsCacheExists(): Promise<boolean> {
+  try {
+    await stat(CLAUDE_STATS_CACHE_PATH);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function loadClaudeStatsCache(): Promise<ClaudeStatsCache> {
   try {
     const raw = await readFile(CLAUDE_STATS_CACHE_PATH, "utf8");

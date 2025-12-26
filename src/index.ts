@@ -4,7 +4,7 @@ import * as p from "@clack/prompts";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { checkClaudeDataExists } from "./collector";
+import { checkClaudeDataExists, checkStatsCacheExists } from "./collector";
 import { calculateStats } from "./stats";
 import { generateImage } from "./image/generator";
 import { displayInTerminal, getTerminalName } from "./terminal/display";
@@ -98,6 +98,13 @@ async function main() {
   }
 
   spinner.stop("Found your stats!");
+
+  const statsCacheExists = await checkStatsCacheExists();
+  if (!statsCacheExists) {
+    p.log.info(
+      "Tip: Run `claude config set statsCache true` to enable detailed stats (tool calls, etc.)"
+    );
+  }
 
   const activityDates = Array.from(stats.dailyActivity.keys())
     .map((d) => new Date(d))
