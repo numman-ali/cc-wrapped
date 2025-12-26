@@ -2,7 +2,9 @@ import type { ClaudeCodeStats, ModelStats, MonthlyActivity, ProviderStats, Weekd
 import { collectClaudeProjects, collectClaudeUsageSummary, loadClaudeStatsCache } from "./collector";
 import { fetchModelsData, getModelDisplayName, getModelProvider, getProviderDisplayName } from "./models";
 
-export async function calculateStats(year: number): Promise<ClaudeCodeStats> {
+const MONTH_NAMES_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+export async function calculateStats(year: number, month?: number): Promise<ClaudeCodeStats> {
   const [, statsCache, projects, usageSummary] = await Promise.all([
     fetchModelsData(),
     loadClaudeStatsCache(),
@@ -24,14 +26,18 @@ export async function calculateStats(year: number): Promise<ClaudeCodeStats> {
       const dateObj = new Date(entryDate);
       const entryYear = dateObj.getFullYear();
       if (entryYear !== year) continue;
+
+      const entryMonth = dateObj.getMonth();
+      // If filtering by month, skip entries not in that month (month is 1-12, getMonth() is 0-11)
+      if (month !== undefined && entryMonth !== month - 1) continue;
+
       dailyActivity.set(entryDate, messageCount);
       totalMessages += messageCount;
 
       const weekday = dateObj.getDay();
       weekdayCounts[weekday] += messageCount;
 
-      const month = dateObj.getMonth();
-      monthlyCounts[month] += messageCount;
+      monthlyCounts[entryMonth] += messageCount;
     }
     totalSessions = usageSummary.totalSessions;
   } else {
@@ -42,6 +48,10 @@ export async function calculateStats(year: number): Promise<ClaudeCodeStats> {
       const entryYear = dateObj.getFullYear();
       if (entryYear !== year) continue;
 
+      const entryMonth = dateObj.getMonth();
+      // If filtering by month, skip entries not in that month (month is 1-12, getMonth() is 0-11)
+      if (month !== undefined && entryMonth !== month - 1) continue;
+
       const messageCount = entry.messageCount ?? 0;
       dailyActivity.set(entryDate, messageCount);
       totalMessages += messageCount;
@@ -51,8 +61,7 @@ export async function calculateStats(year: number): Promise<ClaudeCodeStats> {
       const weekday = dateObj.getDay();
       weekdayCounts[weekday] += messageCount;
 
-      const month = dateObj.getMonth();
-      monthlyCounts[month] += messageCount;
+      monthlyCounts[entryMonth] += messageCount;
     }
   }
 
@@ -206,6 +215,8 @@ export async function calculateStats(year: number): Promise<ClaudeCodeStats> {
 
   return {
     year,
+    month,
+    monthName: month !== undefined ? MONTH_NAMES_FULL[month - 1] : undefined,
     firstSessionDate,
     daysSinceFirstSession,
     totalSessions,
@@ -386,8 +397,6 @@ function buildWeekdayActivity(counts: [number, number, number, number, number, n
 }
 
 function buildMonthlyActivity(counts: [number, number, number, number, number, number, number, number, number, number, number, number]): MonthlyActivity {
-  const MONTH_NAMES_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
   let mostActiveMonth = 0;
   let maxCount = 0;
   for (let i = 0; i < 12; i++) {

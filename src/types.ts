@@ -72,6 +72,8 @@ export interface ProviderStats {
 
 export interface ClaudeCodeStats {
   year: number;
+  month?: number; // 1-12 if showing a specific month, undefined for yearly
+  monthName?: string; // Full month name if showing a specific month
 
   // Time-based
   firstSessionDate: Date;
@@ -141,5 +143,7 @@ export interface MonthlyActivity {
 
 export interface CliArgs {
   year?: number;
+  month?: number; // 1-12 for specific month, undefined for yearly
+  all?: boolean; // Generate all 12 months + yearly
   help?: boolean;
 }

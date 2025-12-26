@@ -49,7 +49,7 @@ export function WrappedTemplate({ stats }: { stats: ClaudeCodeStats }) {
           borderRadius: layout.radius.full,
         }}
       />
-      <Header year={stats.year} />
+      <Header year={stats.year} monthName={stats.monthName} />
 
       <div style={{ marginTop: spacing[8], display: "flex", flexDirection: "row", gap: spacing[16], alignItems: "flex-start" }}>
         <HeroStatItem
@@ -140,7 +140,9 @@ export function WrappedTemplate({ stats }: { stats: ClaudeCodeStats }) {
   );
 }
 
-function Header({ year }: { year: number }) {
+function Header({ year, monthName }: { year: number; monthName?: string }) {
+  const displayLabel = monthName ? `${monthName} ${year}` : String(year);
+
   return (
     <div
       style={{
@@ -199,14 +201,14 @@ function Header({ year }: { year: number }) {
           </span>
           <span
             style={{
-              fontSize: typography.size["3xl"],
+              fontSize: monthName ? typography.size["2xl"] : typography.size["3xl"],
               fontWeight: typography.weight.bold,
               letterSpacing: typography.letterSpacing.normal,
               color: colors.accent.primary,
               lineHeight: typography.lineHeight.none,
             }}
           >
-            {year}
+            {displayLabel}
           </span>
         </div>
       </div>
