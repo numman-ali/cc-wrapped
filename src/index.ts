@@ -25,13 +25,15 @@ USAGE:
   cc-wrapped [OPTIONS]
 
 OPTIONS:
-  --year <YYYY>    Generate wrapped for a specific year (default: current year)
-  --help, -h       Show this help message
-  --version, -v    Show version number
+  -y, --year <YYYY>        Generate wrapped for a specific year (default: current year)
+  -c, --config-dir <PATH>  Path to Claude Code config directory (default: auto-detect)
+  -h, --help               Show this help message
+  -v, --version            Show version number
 
 EXAMPLES:
-  cc-wrapped              # Generate current year wrapped
-  cc-wrapped --year 2025  # Generate 2025 wrapped
+  cc-wrapped                            # Generate current year wrapped
+  cc-wrapped --year 2025                # Generate 2025 wrapped
+  cc-wrapped -c ~/.config/claude        # Use specific config directory
 `);
 }
 
@@ -41,6 +43,7 @@ async function main() {
     args: process.argv.slice(2),
     options: {
       year: { type: "string", short: "y" },
+      "config-dir": { type: "string", short: "c" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
     },
@@ -56,6 +59,11 @@ async function main() {
   if (values.version) {
     console.log(`cc-wrapped v${VERSION}`);
     process.exit(0);
+  }
+
+  // Set config dir from CLI arg (takes priority over auto-detection)
+  if (values["config-dir"]) {
+    process.env.CLAUDE_CONFIG_DIR = values["config-dir"];
   }
 
   p.intro("claude code wrapped");
@@ -75,7 +83,7 @@ async function main() {
 
   const dataExists = await checkClaudeDataExists();
   if (!dataExists) {
-    p.cancel("Claude Code data not found in ~/.claude\n\nMake sure you have used Claude Code at least once.");
+    p.cancel("Claude Code data not found in ~/.config/claude or ~/.claude\n\nMake sure you have used Claude Code at least once.");
     process.exit(0);
   }
 
