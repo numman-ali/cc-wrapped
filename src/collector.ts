@@ -1,11 +1,12 @@
 // Data collector - reads Claude Code storage and returns raw data
 
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import os from "node:os";
 import { createInterface } from "node:readline";
 import { calculateCostUSD, getModelPricing, type ModelPricing } from "./pricing";
+import { formatDateKey } from "./utils/dates";
 
 export interface ClaudeStatsCache {
   version?: number;
@@ -38,11 +39,30 @@ export interface ClaudeStatsCache {
 }
 
 const CLAUDE_DATA_PATH = join(os.homedir(), ".claude");
-const CLAUDE_STATS_CACHE_PATH = join(CLAUDE_DATA_PATH, "stats-cache.json");
-const CLAUDE_HISTORY_PATH = join(CLAUDE_DATA_PATH, "history.jsonl");
-const CLAUDE_PROJECTS_DIR = "projects";
 const CLAUDE_CONFIG_PATH = join(os.homedir(), ".config", "claude");
+const CLAUDE_PROJECTS_DIR = "projects";
 const CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+
+// Resolve Claude data path
+// Priority: 1. CLAUDE_CONFIG_DIR env var, 2. ~/.config/claude (XDG), 3. ~/.claude (legacy)
+export function resolveClaudeDataPath(): string | null {
+  const envPath = process.env[CLAUDE_CONFIG_DIR_ENV]?.trim();
+  if (envPath && existsSync(join(envPath, "stats-cache.json"))) {
+    return envPath;
+  }
+
+  const candidates = [
+    CLAUDE_CONFIG_PATH,  // XDG standard (~/.config/claude)
+    CLAUDE_DATA_PATH,    // Legacy (~/.claude)
+  ];
+
+  for (const path of candidates) {
+    if (existsSync(join(path, "stats-cache.json"))) {
+      return path;
+    }
+  }
+  return null;
+}
 
 export interface ClaudeUsageSummary {
   totalInputTokens: number;
@@ -59,24 +79,32 @@ export interface ClaudeUsageSummary {
 }
 
 export async function checkClaudeDataExists(): Promise<boolean> {
-  try {
-    await readFile(CLAUDE_STATS_CACHE_PATH);
-    return true;
-  } catch {
-    return false;
-  }
+  return resolveClaudeDataPath() !== null;
+}
+
+function isValidStatsCache(data: unknown): data is ClaudeStatsCache {
+  return typeof data === "object" && data !== null;
 }
 
 export async function loadClaudeStatsCache(): Promise<ClaudeStatsCache> {
-  const raw = await readFile(CLAUDE_STATS_CACHE_PATH, "utf8");
-  return JSON.parse(raw) as ClaudeStatsCache;
+  const dataPath = resolveClaudeDataPath();
+  if (!dataPath) throw new Error("Claude data not found");
+  const raw = await readFile(join(dataPath, "stats-cache.json"), "utf8");
+  const parsed: unknown = JSON.parse(raw);
+  if (!isValidStatsCache(parsed)) {
+    throw new Error("Invalid stats-cache.json format");
+  }
+  return parsed;
 }
 
 export async function collectClaudeProjects(year: number): Promise<Set<string>> {
   const projects = new Set<string>();
+  const dataPath = resolveClaudeDataPath();
+  if (!dataPath) return projects;
 
   try {
-    const raw = await readFile(CLAUDE_HISTORY_PATH, "utf8");
+    const historyPath = join(dataPath, "history.jsonl");
+    const raw = await readFile(historyPath, "utf8");
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
       try {
@@ -127,9 +155,11 @@ export async function collectClaudeUsageSummary(year: number): Promise<ClaudeUsa
       for await (const line of rl) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-        let entry: any;
+        let entry: Record<string, unknown>;
         try {
-          entry = JSON.parse(trimmed);
+          const parsed: unknown = JSON.parse(trimmed);
+          if (typeof parsed !== "object" || parsed === null) continue;
+          entry = parsed as Record<string, unknown>;
         } catch {
           continue;
         }
@@ -142,8 +172,8 @@ export async function collectClaudeUsageSummary(year: number): Promise<ClaudeUsa
           processedHashes.add(uniqueHash);
         }
 
-        const timestamp = entry?.timestamp;
-        if (!timestamp) continue;
+        const timestamp = entry.timestamp;
+        if (typeof timestamp !== "number" && typeof timestamp !== "string") continue;
         const entryDate = new Date(timestamp);
         if (Number.isNaN(entryDate.getTime()) || entryDate.getFullYear() !== year) {
           continue;
@@ -157,15 +187,16 @@ export async function collectClaudeUsageSummary(year: number): Promise<ClaudeUsa
         dailyActivity.set(dateKey, (dailyActivity.get(dateKey) || 0) + 1);
         totalMessages += 1;
 
-        const sessionId = typeof entry?.sessionId === "string" ? entry.sessionId : undefined;
+        const sessionId = typeof entry.sessionId === "string" ? entry.sessionId : undefined;
         if (sessionId) {
           sessionIds.add(sessionId);
         }
 
-        const usage = entry?.message?.usage;
-        const model = typeof entry?.message?.model === "string" ? entry.message.model : undefined;
+        const message = entry.message as Record<string, unknown> | undefined;
+        const usage = message?.usage as Record<string, unknown> | undefined;
+        const model = typeof message?.model === "string" ? message.model : undefined;
 
-        const rawCost = entry?.costUSD;
+        const rawCost = entry.costUSD;
         const hasCost = typeof rawCost === "number" && Number.isFinite(rawCost);
         if (hasCost) {
           totalCostUSD += rawCost;
@@ -227,9 +258,10 @@ export async function collectClaudeUsageSummary(year: number): Promise<ClaudeUsa
   };
 }
 
-function createUniqueHash(entry: any): string | null {
-  const messageId = entry?.message?.id;
-  const requestId = entry?.requestId;
+function createUniqueHash(entry: Record<string, unknown>): string | null {
+  const message = entry.message as Record<string, unknown> | undefined;
+  const messageId = message?.id;
+  const requestId = entry.requestId;
   if (!messageId || !requestId) return null;
   return `${messageId}:${requestId}`;
 }
@@ -306,9 +338,3 @@ function ensureNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function formatDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}

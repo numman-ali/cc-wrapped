@@ -1,6 +1,7 @@
 import type { ClaudeCodeStats, ModelStats, ProviderStats, WeekdayActivity } from "./types";
 import { collectClaudeProjects, collectClaudeUsageSummary, loadClaudeStatsCache } from "./collector";
 import { fetchModelsData, getModelDisplayName, getModelProvider, getProviderDisplayName } from "./models";
+import { formatDateKey } from "./utils/dates";
 
 export async function calculateStats(year: number): Promise<ClaudeCodeStats> {
   const [, statsCache, projects, usageSummary] = await Promise.all([
@@ -237,13 +238,6 @@ function findFirstActivityDate(dailyActivity: Map<string, number>): Date {
   if (dailyActivity.size === 0) return new Date();
   const dates = Array.from(dailyActivity.keys()).sort();
   return new Date(dates[0]);
-}
-
-function formatDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function calculateStreaks(

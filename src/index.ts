@@ -4,7 +4,7 @@ import * as p from "@clack/prompts";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { checkClaudeDataExists } from "./collector";
+import { checkClaudeDataExists, resolveClaudeDataPath } from "./collector";
 import { calculateStats } from "./stats";
 import { generateImage } from "./image/generator";
 import { displayInTerminal, getTerminalName } from "./terminal/display";
@@ -25,13 +25,19 @@ USAGE:
   cc-wrapped [OPTIONS]
 
 OPTIONS:
-  --year <YYYY>    Generate wrapped for a specific year (default: current year)
-  --help, -h       Show this help message
-  --version, -v    Show version number
+  -y, --year <YYYY>        Generate wrapped for a specific year (default: current year)
+  -c, --config-dir <PATH>  Path to Claude Code config directory (default: auto-detect)
+  -o, --output <PATH>      Output path for image (default: ~/cc-wrapped-YYYY.png)
+  -V, --verbose            Show debug information
+  -h, --help               Show this help message
+  -v, --version            Show version number
 
 EXAMPLES:
-  cc-wrapped              # Generate current year wrapped
-  cc-wrapped --year 2025  # Generate 2025 wrapped
+  cc-wrapped                            # Generate current year wrapped
+  cc-wrapped --year 2025                # Generate 2025 wrapped
+  cc-wrapped -c ~/.config/claude        # Use specific config directory
+  cc-wrapped -o ~/Desktop/wrapped.png   # Save to specific location
+  cc-wrapped --verbose                  # Show debug info
 `);
 }
 
@@ -41,6 +47,9 @@ async function main() {
     args: process.argv.slice(2),
     options: {
       year: { type: "string", short: "y" },
+      "config-dir": { type: "string", short: "c" },
+      output: { type: "string", short: "o" },
+      verbose: { type: "boolean", short: "V" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
     },
@@ -58,9 +67,28 @@ async function main() {
     process.exit(0);
   }
 
+  // Set config dir from CLI arg (takes priority over auto-detection)
+  if (values["config-dir"]) {
+    process.env.CLAUDE_CONFIG_DIR = values["config-dir"];
+  }
+
+  const verbose = values.verbose ?? false;
+
   p.intro("claude code wrapped");
 
+  // Show verbose debug info
+  if (verbose) {
+    const configPath = resolveClaudeDataPath();
+    p.log.info(`Config directory: ${configPath ?? "not found"}`);
+  }
+
   const requestedYear = values.year ? parseInt(values.year, 10) : new Date().getFullYear();
+
+  // Validate year parameter
+  if (Number.isNaN(requestedYear) || requestedYear < 2024 || requestedYear > new Date().getFullYear()) {
+    p.cancel(`Invalid year: ${values.year}. Must be between 2024 and ${new Date().getFullYear()}`);
+    process.exit(1);
+  }
 
   const availability = isWrappedAvailable(requestedYear);
   if (!availability.available) {
@@ -75,7 +103,7 @@ async function main() {
 
   const dataExists = await checkClaudeDataExists();
   if (!dataExists) {
-    p.cancel("Claude Code data not found in ~/.claude\n\nMake sure you have used Claude Code at least once.");
+    p.cancel("Claude Code data not found in ~/.config/claude or ~/.claude\n\nMake sure you have used Claude Code at least once.");
     process.exit(0);
   }
 
@@ -87,7 +115,8 @@ async function main() {
     stats = await calculateStats(requestedYear);
   } catch (error) {
     spinner.stop("Failed to collect stats");
-    p.cancel(`Error: ${error}`);
+    const message = error instanceof Error ? error.message : String(error);
+    p.cancel(`Failed to collect stats: ${message}`);
     process.exit(1);
   }
 
@@ -95,6 +124,11 @@ async function main() {
     spinner.stop("No data found");
     p.cancel(`No Claude Code activity found for ${requestedYear}`);
     process.exit(0);
+  }
+
+  // Show verbose stats summary
+  if (verbose) {
+    p.log.info(`Sessions: ${stats.totalSessions}, Messages: ${stats.totalMessages}, Projects: ${stats.totalProjects}`);
   }
 
   spinner.stop("Found your stats!");
@@ -157,24 +191,39 @@ async function main() {
     p.log.info("You can save the image to disk instead.");
   }
 
-  const defaultPath = join(process.env.HOME || "~", filename);
-
-  const shouldSave = await p.confirm({
-    message: `Save image to ~/${filename}?`,
-    initialValue: true,
-  });
-
-  if (p.isCancel(shouldSave)) {
-    p.outro("Cancelled");
-    process.exit(0);
-  }
-
-  if (shouldSave) {
+  // Handle image saving
+  const outputPath = values.output;
+  if (outputPath) {
+    // If --output is provided, save directly without prompting
     try {
-      await Bun.write(defaultPath, image.fullSize);
-      p.log.success(`Saved to ${defaultPath}`);
+      await Bun.write(outputPath, image.fullSize);
+      p.log.success(`Saved to ${outputPath}`);
     } catch (error) {
-      p.log.error(`Failed to save: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      p.log.error(`Failed to save: ${message}`);
+    }
+  } else {
+    // Interactive mode: prompt user
+    const defaultPath = join(process.env.HOME || "~", filename);
+
+    const shouldSave = await p.confirm({
+      message: `Save image to ~/${filename}?`,
+      initialValue: true,
+    });
+
+    if (p.isCancel(shouldSave)) {
+      p.outro("Cancelled");
+      process.exit(0);
+    }
+
+    if (shouldSave) {
+      try {
+        await Bun.write(defaultPath, image.fullSize);
+        p.log.success(`Saved to ${defaultPath}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        p.log.error(`Failed to save: ${message}`);
+      }
     }
   }
 
