@@ -1,6 +1,6 @@
 // Data collector - reads Claude Code storage and returns raw data
 
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import os from "node:os";
@@ -38,11 +38,30 @@ export interface ClaudeStatsCache {
 }
 
 const CLAUDE_DATA_PATH = join(os.homedir(), ".claude");
-const CLAUDE_STATS_CACHE_PATH = join(CLAUDE_DATA_PATH, "stats-cache.json");
-const CLAUDE_HISTORY_PATH = join(CLAUDE_DATA_PATH, "history.jsonl");
-const CLAUDE_PROJECTS_DIR = "projects";
 const CLAUDE_CONFIG_PATH = join(os.homedir(), ".config", "claude");
+const CLAUDE_PROJECTS_DIR = "projects";
 const CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+
+// Resolve Claude data path
+// Priority: 1. CLAUDE_CONFIG_DIR env var, 2. ~/.config/claude (XDG), 3. ~/.claude (legacy)
+function resolveClaudeDataPath(): string | null {
+  const envPath = process.env[CLAUDE_CONFIG_DIR_ENV]?.trim();
+  if (envPath && existsSync(join(envPath, "stats-cache.json"))) {
+    return envPath;
+  }
+
+  const candidates = [
+    CLAUDE_CONFIG_PATH,  // XDG standard (~/.config/claude)
+    CLAUDE_DATA_PATH,    // Legacy (~/.claude)
+  ];
+
+  for (const path of candidates) {
+    if (existsSync(join(path, "stats-cache.json"))) {
+      return path;
+    }
+  }
+  return null;
+}
 
 export interface ClaudeUsageSummary {
   totalInputTokens: number;
@@ -59,24 +78,24 @@ export interface ClaudeUsageSummary {
 }
 
 export async function checkClaudeDataExists(): Promise<boolean> {
-  try {
-    await readFile(CLAUDE_STATS_CACHE_PATH);
-    return true;
-  } catch {
-    return false;
-  }
+  return resolveClaudeDataPath() !== null;
 }
 
 export async function loadClaudeStatsCache(): Promise<ClaudeStatsCache> {
-  const raw = await readFile(CLAUDE_STATS_CACHE_PATH, "utf8");
+  const dataPath = resolveClaudeDataPath();
+  if (!dataPath) throw new Error("Claude data not found");
+  const raw = await readFile(join(dataPath, "stats-cache.json"), "utf8");
   return JSON.parse(raw) as ClaudeStatsCache;
 }
 
 export async function collectClaudeProjects(year: number): Promise<Set<string>> {
   const projects = new Set<string>();
+  const dataPath = resolveClaudeDataPath();
+  if (!dataPath) return projects;
 
   try {
-    const raw = await readFile(CLAUDE_HISTORY_PATH, "utf8");
+    const historyPath = join(dataPath, "history.jsonl");
+    const raw = await readFile(historyPath, "utf8");
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
       try {

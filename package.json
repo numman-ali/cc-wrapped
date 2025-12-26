@@ -37,8 +37,7 @@
     "@clack/prompts": "^0.11.0",
     "@resvg/resvg-wasm": "^2.6.2",
     "react": "^19.2.3",
-    "satori": "^0.18.3",
-    "xdg-basedir": "^5.1.0"
+    "satori": "^0.18.3"
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
