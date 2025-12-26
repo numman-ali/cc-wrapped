@@ -120,12 +120,22 @@ export interface ClaudeCodeStats {
 
   // Weekday activity distribution (0=Sunday, 6=Saturday)
   weekdayActivity: WeekdayActivity;
+
+  // Monthly activity distribution (0=January, 11=December)
+  monthlyActivity: MonthlyActivity;
 }
 
 export interface WeekdayActivity {
   counts: [number, number, number, number, number, number, number];
   mostActiveDay: number;
   mostActiveDayName: string;
+  maxCount: number;
+}
+
+export interface MonthlyActivity {
+  counts: [number, number, number, number, number, number, number, number, number, number, number, number]; // Jan-Dec
+  mostActiveMonth: number;
+  mostActiveMonthName: string;
   maxCount: number;
 }
 
