@@ -15,6 +15,8 @@ import type { ClaudeCodeStats } from "./types";
 
 const VERSION = "1.0.0";
 
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 function printHelp() {
   console.log(`
 cc-wrapped v${VERSION}
@@ -26,12 +28,17 @@ USAGE:
 
 OPTIONS:
   --year <YYYY>    Generate wrapped for a specific year (default: current year)
+  --month <1-12>   Generate wrapped for a specific month (1=January, 12=December)
+  --all            Generate all 12 monthly wraps + yearly summary
   --help, -h       Show this help message
   --version, -v    Show version number
 
 EXAMPLES:
-  cc-wrapped              # Generate current year wrapped
-  cc-wrapped --year 2025  # Generate 2025 wrapped
+  cc-wrapped                    # Generate current year wrapped
+  cc-wrapped --year 2025        # Generate 2025 wrapped
+  cc-wrapped --month 12         # Generate December wrapped
+  cc-wrapped --all              # Generate all months + yearly
+  cc-wrapped --year 2025 --all  # Generate all months + yearly for 2025
 `);
 }
 
@@ -41,6 +48,8 @@ async function main() {
     args: process.argv.slice(2),
     options: {
       year: { type: "string", short: "y" },
+      month: { type: "string", short: "m" },
+      all: { type: "boolean", short: "a" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
     },
@@ -61,6 +70,14 @@ async function main() {
   p.intro("claude code wrapped");
 
   const requestedYear = values.year ? parseInt(values.year, 10) : new Date().getFullYear();
+  const requestedMonth = values.month ? parseInt(values.month, 10) : undefined;
+  const generateAll = values.all ?? false;
+
+  // Validate month if provided
+  if (requestedMonth !== undefined && (requestedMonth < 1 || requestedMonth > 12)) {
+    p.cancel("Month must be between 1 and 12");
+    process.exit(1);
+  }
 
   const availability = isWrappedAvailable(requestedYear);
   if (!availability.available) {
@@ -79,31 +96,93 @@ async function main() {
     process.exit(0);
   }
 
-  const spinner = p.spinner();
-  spinner.start("Scanning your Claude Code history...");
-
-  let stats;
-  try {
-    stats = await calculateStats(requestedYear);
-  } catch (error) {
-    spinner.stop("Failed to collect stats");
-    p.cancel(`Error: ${error}`);
-    process.exit(1);
+  // Determine which periods to generate
+  interface GenerationPeriod {
+    month?: number;
+    label: string;
+    filename: string;
   }
 
-  if (stats.totalSessions === 0) {
-    spinner.stop("No data found");
+  const periods: GenerationPeriod[] = [];
+
+  if (generateAll) {
+    // Generate all 12 months + yearly
+    for (let m = 1; m <= 12; m++) {
+      periods.push({
+        month: m,
+        label: `${MONTH_NAMES[m - 1]} ${requestedYear}`,
+        filename: `cc-wrapped-${requestedYear}-${String(m).padStart(2, "0")}.png`,
+      });
+    }
+    periods.push({
+      month: undefined,
+      label: `${requestedYear} (yearly)`,
+      filename: `cc-wrapped-${requestedYear}.png`,
+    });
+  } else if (requestedMonth !== undefined) {
+    // Generate specific month only
+    periods.push({
+      month: requestedMonth,
+      label: `${MONTH_NAMES[requestedMonth - 1]} ${requestedYear}`,
+      filename: `cc-wrapped-${requestedYear}-${String(requestedMonth).padStart(2, "0")}.png`,
+    });
+  } else {
+    // Generate yearly only (default)
+    periods.push({
+      month: undefined,
+      label: String(requestedYear),
+      filename: `cc-wrapped-${requestedYear}.png`,
+    });
+  }
+
+  const spinner = p.spinner();
+  const generatedImages: Array<{ stats: ClaudeCodeStats; image: { fullSize: Buffer; displaySize: Buffer }; period: GenerationPeriod }> = [];
+
+  for (const period of periods) {
+    spinner.start(`Generating wrapped for ${period.label}...`);
+
+    let stats;
+    try {
+      stats = await calculateStats(requestedYear, period.month);
+    } catch (error) {
+      spinner.stop("Failed to collect stats");
+      p.cancel(`Error: ${error}`);
+      process.exit(1);
+    }
+
+    if (stats.totalMessages === 0) {
+      spinner.stop(`No data for ${period.label}`);
+      p.log.warn(`No Claude Code activity found for ${period.label}`);
+      continue;
+    }
+
+    let image: { fullSize: Buffer; displaySize: Buffer };
+    try {
+      image = await generateImage(stats);
+    } catch (error) {
+      spinner.stop("Failed to generate image");
+      p.cancel(`Error generating image: ${error}`);
+      process.exit(1);
+    }
+
+    generatedImages.push({ stats, image, period });
+    spinner.stop(`Generated ${period.label}`);
+  }
+
+  if (generatedImages.length === 0) {
     p.cancel(`No Claude Code activity found for ${requestedYear}`);
     process.exit(0);
   }
 
-  spinner.stop("Found your stats!");
+  // Show summary for the primary/last generated image
+  const primary = generatedImages[generatedImages.length - 1];
+  const { stats } = primary;
 
   const activityDates = Array.from(stats.dailyActivity.keys())
     .map((d) => new Date(d))
     .filter((d) => !Number.isNaN(d.getTime()))
     .sort((a, b) => a.getTime() - b.getTime());
-  if (activityDates.length > 1 && requestedYear === new Date().getFullYear()) {
+  if (activityDates.length > 1 && requestedYear === new Date().getFullYear() && !stats.month) {
     const spanDays = Math.ceil(
       (activityDates[activityDates.length - 1].getTime() - activityDates[0].getTime()) /
         (1000 * 60 * 60 * 24)
@@ -126,41 +205,34 @@ async function main() {
     stats.mostActiveDay && `Most Active:   ${stats.mostActiveDay.formattedDate}`,
   ].filter(Boolean);
 
-  p.note(summaryLines.join("\n"), `Your ${requestedYear} in Claude Code`);
+  const summaryTitle = stats.monthName
+    ? `Your ${stats.monthName} ${requestedYear} in Claude Code`
+    : `Your ${requestedYear} in Claude Code`;
+  p.note(summaryLines.join("\n"), summaryTitle);
 
-  // Generate image
-  spinner.start("Generating your wrapped image...");
-
-  let image: { fullSize: Buffer; displaySize: Buffer };
-  try {
-    image = await generateImage(stats);
-  } catch (error) {
-    spinner.stop("Failed to generate image");
-    p.cancel(`Error generating image: ${error}`);
-    process.exit(1);
-  }
-
-  spinner.stop("Image generated!");
-
-  const displayed = await displayInTerminal(image.displaySize);
+  // Display the primary image in terminal
+  const displayed = await displayInTerminal(primary.image.displaySize);
   if (!displayed) {
     p.log.info(`Terminal (${getTerminalName()}) doesn't support inline images`);
   }
 
-  const filename = `cc-wrapped-${requestedYear}.png`;
-  const { success, error } = await copyImageToClipboard(image.fullSize, filename);
+  // Copy primary image to clipboard
+  const { success, error } = await copyImageToClipboard(primary.image.fullSize, primary.period.filename);
 
   if (success) {
     p.log.success("Automatically copied image to clipboard!");
   } else {
     p.log.warn(`Clipboard unavailable: ${error}`);
-    p.log.info("You can save the image to disk instead.");
+    p.log.info("You can save the images to disk instead.");
   }
 
-  const defaultPath = join(process.env.HOME || "~", filename);
+  // Ask to save images
+  const saveMessage = generatedImages.length > 1
+    ? `Save ${generatedImages.length} images to home directory?`
+    : `Save image to ~/${primary.period.filename}?`;
 
   const shouldSave = await p.confirm({
-    message: `Save image to ~/${filename}?`,
+    message: saveMessage,
     initialValue: true,
   });
 
@@ -170,11 +242,14 @@ async function main() {
   }
 
   if (shouldSave) {
-    try {
-      await Bun.write(defaultPath, image.fullSize);
-      p.log.success(`Saved to ${defaultPath}`);
-    } catch (error) {
-      p.log.error(`Failed to save: ${error}`);
+    for (const { image, period } of generatedImages) {
+      const defaultPath = join(process.env.HOME || "~", period.filename);
+      try {
+        await Bun.write(defaultPath, image.fullSize);
+        p.log.success(`Saved ${period.filename}`);
+      } catch (err) {
+        p.log.error(`Failed to save ${period.filename}: ${err}`);
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import type { ClaudeCodeStats, WeekdayActivity } from "../types";
+import type { ClaudeCodeStats, MonthlyActivity, WeekdayActivity } from "../types";
 import { formatNumberFull, formatCostFull, formatDate } from "../utils/format";
 import { ActivityHeatmap } from "./heatmap";
 import { colors, typography, spacing, layout, components } from "./design-tokens";
@@ -49,7 +49,7 @@ export function WrappedTemplate({ stats }: { stats: ClaudeCodeStats }) {
           borderRadius: layout.radius.full,
         }}
       />
-      <Header year={stats.year} />
+      <Header year={stats.year} monthName={stats.monthName} />
 
       <div style={{ marginTop: spacing[8], display: "flex", flexDirection: "row", gap: spacing[16], alignItems: "flex-start" }}>
         <HeroStatItem
@@ -96,6 +96,31 @@ export function WrappedTemplate({ stats }: { stats: ClaudeCodeStats }) {
         style={{
           marginTop: spacing[8],
           display: "flex",
+          flexDirection: "column",
+          backgroundColor: colors.surface,
+          borderRadius: layout.radius.lg,
+          padding: spacing[8],
+          border: `1px solid ${colors.surfaceBorder}`,
+        }}
+      >
+        <span
+          style={{
+            fontSize: components.sectionHeader.fontSize,
+            fontWeight: components.sectionHeader.fontWeight,
+            color: components.sectionHeader.color,
+            letterSpacing: components.sectionHeader.letterSpacing,
+            textTransform: components.sectionHeader.textTransform,
+          }}
+        >
+          Monthly
+        </span>
+        <MonthlyBarChart monthlyActivity={stats.monthlyActivity} />
+      </div>
+
+      <div
+        style={{
+          marginTop: spacing[8],
+          display: "flex",
           flexDirection: "row",
           gap: spacing[16],
         }}
@@ -115,7 +140,9 @@ export function WrappedTemplate({ stats }: { stats: ClaudeCodeStats }) {
   );
 }
 
-function Header({ year }: { year: number }) {
+function Header({ year, monthName }: { year: number; monthName?: string }) {
+  const displayLabel = monthName ? `${monthName} ${year}` : String(year);
+
   return (
     <div
       style={{
@@ -174,14 +201,14 @@ function Header({ year }: { year: number }) {
           </span>
           <span
             style={{
-              fontSize: typography.size["3xl"],
+              fontSize: monthName ? typography.size["2xl"] : typography.size["3xl"],
               fontWeight: typography.weight.bold,
               letterSpacing: typography.letterSpacing.normal,
               color: colors.accent.primary,
               lineHeight: typography.lineHeight.none,
             }}
           >
-            {year}
+            {displayLabel}
           </span>
         </div>
       </div>
@@ -296,6 +323,74 @@ function WeeklyBarChart({ weekdayActivity }: { weekdayActivity: WeekdayActivity 
                 display: "flex",
                 justifyContent: "center",
                 fontSize: typography.size.sm,
+                fontWeight: isHighlighted ? typography.weight.bold : typography.weight.regular,
+                color: isHighlighted ? colors.accent.primary : colors.text.muted,
+              }}
+            >
+              {label}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHLY_BAR_HEIGHT = 80;
+const MONTHLY_BAR_WIDTH = 28;
+const MONTHLY_BAR_GAP = 6;
+
+function MonthlyBarChart({ monthlyActivity }: { monthlyActivity: MonthlyActivity }) {
+  const { counts, mostActiveMonth, maxCount } = monthlyActivity;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "flex-end",
+          gap: MONTHLY_BAR_GAP,
+          height: MONTHLY_BAR_HEIGHT,
+        }}
+      >
+        {counts.map((count, i) => {
+          const heightPercent = maxCount > 0 ? count / maxCount : 0;
+          const barHeight = Math.max(6, Math.round(heightPercent * MONTHLY_BAR_HEIGHT));
+          const isHighlighted = i === mostActiveMonth;
+
+          return (
+            <div
+              key={i}
+              style={{
+                width: MONTHLY_BAR_WIDTH,
+                height: barHeight,
+                backgroundColor: isHighlighted ? colors.accent.primary : colors.streak.level4,
+                borderRadius: 4,
+              }}
+            />
+          );
+        })}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          gap: MONTHLY_BAR_GAP,
+        }}
+      >
+        {MONTH_LABELS.map((label, i) => {
+          const isHighlighted = i === mostActiveMonth;
+          return (
+            <div
+              key={i}
+              style={{
+                width: MONTHLY_BAR_WIDTH,
+                display: "flex",
+                justifyContent: "center",
+                fontSize: typography.size.xs,
                 fontWeight: isHighlighted ? typography.weight.bold : typography.weight.regular,
                 color: isHighlighted ? colors.accent.primary : colors.text.muted,
               }}

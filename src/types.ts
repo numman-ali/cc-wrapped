@@ -72,6 +72,8 @@ export interface ProviderStats {
 
 export interface ClaudeCodeStats {
   year: number;
+  month?: number; // 1-12 if showing a specific month, undefined for yearly
+  monthName?: string; // Full month name if showing a specific month
 
   // Time-based
   firstSessionDate: Date;
@@ -120,6 +122,9 @@ export interface ClaudeCodeStats {
 
   // Weekday activity distribution (0=Sunday, 6=Saturday)
   weekdayActivity: WeekdayActivity;
+
+  // Monthly activity distribution (0=January, 11=December)
+  monthlyActivity: MonthlyActivity;
 }
 
 export interface WeekdayActivity {
@@ -129,7 +134,16 @@ export interface WeekdayActivity {
   maxCount: number;
 }
 
+export interface MonthlyActivity {
+  counts: [number, number, number, number, number, number, number, number, number, number, number, number]; // Jan-Dec
+  mostActiveMonth: number;
+  mostActiveMonthName: string;
+  maxCount: number;
+}
+
 export interface CliArgs {
   year?: number;
+  month?: number; // 1-12 for specific month, undefined for yearly
+  all?: boolean; // Generate all 12 months + yearly
   help?: boolean;
 }
